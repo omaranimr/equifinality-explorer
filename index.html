@@ -847,9 +847,10 @@ function drawCatchment(){
   // day timeline
   drawDay();
 }
+const DAY_L=34,DAY_R=6; // shared by drawing and hover so the cursor and day line match
 function drawDay(){
   const g=prep($("cvDay"));if(!g||!st.cur)return;const{ctx,w,h}=g,S=st.cur,t0=st.probe;
-  const L=34,R=6,Tp=20,B=14,pw=w-L-R,X=t=>L+(t+0.5)/N*pw,rainH=(h-Tp-B)*0.2,qTop=Tp+rainH+4,qBot=h-B;
+  const L=DAY_L,R=DAY_R,Tp=20,B=14,pw=w-L-R,X=t=>L+(t+0.5)/N*pw,rainH=(h-Tp-B)*0.2,qTop=Tp+rainH+4,qBot=h-B;
   const Y=v=>qBot-v/qMax*(qBot-qTop);
   ctx.fillStyle=alpha(C.ink,0.04);ctx.fillRect(L,Tp,pw,h-Tp-B);
   ctx.font=FONT(10.5);ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;
@@ -932,7 +933,7 @@ function nearest(geomFn,x,y){let bi=-1,bd=144;for(let i=0;i<NS;i++){const[px,py]
 $("cvDotty").addEventListener("click",e=>{const r=e.currentTarget.getBoundingClientRect();const i=nearest(k=>[dottyGeom.X(SO[k]),dottyGeom.Y(JJ[k])],e.clientX-r.left,e.clientY-r.top);if(i>=0){stopPlay();select(i,{syncSlider:true});}});
 $("cvTern").addEventListener("click",e=>{const r=e.currentTarget.getBoundingClientRect();const i=nearest(k=>ternGeom.pt(SO[k],SS[k],SG[k]),e.clientX-r.left,e.clientY-r.top);if(i>=0){stopPlay();select(i,{syncSlider:true});}});
 ["cvDotty","cvTern"].forEach(id=>$(id).style.cursor="crosshair");
-function probeFrom(e){const cv=e.currentTarget,r=cv.getBoundingClientRect(),pw=r.width-TL-TR;const t=Math.floor((e.clientX-r.left-TL)/pw*N);const tt=Math.max(0,Math.min(N-1,t));if(tt!==st.probe){st.probe=tt;requestDraw();}}
+function probeFrom(e){const cv=e.currentTarget,r=cv.getBoundingClientRect(),pw=r.width-TL-TR;const t=Math.round((e.clientX-r.left-TL)/pw*N-0.5);const tt=Math.max(0,Math.min(N-1,t));if(tt!==st.probe){st.probe=tt;requestDraw();}}
 ["cvHydro","cvIso"].forEach(id=>{$(id).addEventListener("pointermove",probeFrom);$(id).addEventListener("pointerdown",probeFrom);});
 
 let raf=0,last=0;
@@ -968,7 +969,7 @@ $("tabCm").addEventListener("click",()=>setView(true));
 $("modeDay").addEventListener("click",()=>setCmMode("day"));
 $("modePer").addEventListener("click",()=>{stopDays();setCmMode("per");});
 $("playDays").addEventListener("click",()=>st.dayPlaying?stopDays():startDays());
-{const cv=$("cvDay");const pick=e=>{const r=cv.getBoundingClientRect();const t=Math.max(0,Math.min(N-1,Math.floor((e.clientX-r.left-4)/(r.width-8)*N)));if(t!==st.probe){st.probe=t;requestDraw();}};
+{const cv=$("cvDay");const pick=e=>{const r=cv.getBoundingClientRect();const t=Math.max(0,Math.min(N-1,Math.round((e.clientX-r.left-DAY_L)/(r.width-DAY_L-DAY_R)*N-0.5)));if(t!==st.probe){st.probe=t;requestDraw();}};
  cv.addEventListener("pointermove",pick);cv.addEventListener("pointerdown",e=>{stopDays();pick(e);});}
 function setDefs(on){document.body.classList.toggle("show-defs",on);$("defsBtn").setAttribute("aria-checked",String(on));if(on&&document.body.classList.contains("no-expl"))setBasics(true);else requestDraw();}
 $("defsBtn").addEventListener("click",()=>setDefs(!document.body.classList.contains("show-defs")));
