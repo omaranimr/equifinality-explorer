@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Equifinality explorer: one hydrograph, many catchments</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Familjen+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#EDF1F0; --panel:#F8FAF9; --card:#E3EAE8; --ink:#18262D; --muted:#5B6B70; --line:#CFD9D7;
+  --overland:#2E86C9; --shallow:#B9852E; --ground:#2F5D50; --iso:#6B4FA3; --truth:#B8323A; --rain:#8CA4B0;
+  --focus:#2E86C9;
+  --display:"Familjen Grotesk","Helvetica Neue",Arial,sans-serif;
+  --body:"Atkinson Hyperlegible","Segoe UI",Roboto,Arial,sans-serif;
+  --vh-free:calc(100vh - 400px);
+  --surfL:#C3D1B1; --surfR:#A8BA96; --band:#DCCBA9; --gwz:#CFC9BC; --water:#9CC4E4; --mixbg:#C2BBAB; --mixdot:#6F6A5F; --cloud:#FFFFFF;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10171A; --panel:#172227; --card:#1A272D; --ink:#E3EBEC; --muted:#93A3A8; --line:#2A3A40;
+    --overland:#5AAEEA; --shallow:#D9A54A; --ground:#5FA48F; --iso:#AE94E6; --truth:#F0707A; --rain:#4E6A77; --focus:#5AAEEA;
+    --surfL:#3E4E3C; --surfR:#334131; --band:#544634; --gwz:#3A3935; --water:#2F5470; --mixbg:#34332F; --mixdot:#8E887A; --cloud:#2B3A43;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10171A; --panel:#172227; --card:#1A272D; --ink:#E3EBEC; --muted:#93A3A8; --line:#2A3A40;
+  --overland:#5AAEEA; --shallow:#D9A54A; --ground:#5FA48F; --iso:#AE94E6; --truth:#F0707A; --rain:#4E6A77; --focus:#5AAEEA;
+  --surfL:#3E4E3C; --surfR:#334131; --band:#544634; --gwz:#3A3935; --water:#2F5470; --mixbg:#34332F; --mixdot:#8E887A; --cloud:#2B3A43;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45}
+.wrap{max-width:1680px;margin:0 auto;padding:16px clamp(12px,2vw,28px) 18px}
+header{margin-bottom:10px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(1.5rem,2.3vw,2.2rem);letter-spacing:-0.015em;line-height:1.05;margin:0}
+.sub{margin:4px 0 0;color:var(--muted);max-width:120ch}
+sub,sup{line-height:0}
+
+/* control bar */
+.bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 20px;padding:8px 0 10px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.group{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+button,.toggle{font:inherit;font-size:.92rem;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;user-select:none}
+button:hover,.toggle:hover{border-color:var(--muted)}
+button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:700}
+.toggle input{accent-color:var(--ink);margin:0;width:15px;height:15px}
+:focus-visible{outline:2.5px solid var(--focus);outline-offset:2px}
+.seg{display:inline-flex;border:1.5px solid var(--iso);border-radius:999px;padding:2px;background:var(--panel)}
+.seg button{border:0;background:transparent;padding:6px 14px;font-weight:700;color:var(--iso)}
+.seg button[aria-pressed="true"]{background:var(--iso);color:var(--panel)}
+.wctl,.thresh{display:inline-flex;align-items:center;gap:8px;font-size:.92rem;color:var(--muted)}
+.wctl output,.thresh output{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums;min-width:2.6em}
+.wctl input{width:110px;accent-color:var(--iso)}
+.thresh input{width:90px;accent-color:var(--ink)}
+.formula{font-size:.95rem;color:var(--ink);white-space:nowrap}
+.formula i{font-style:italic}
+.formula .w{color:var(--iso);font-weight:700}
+
+/* layout */
+.grid{display:grid;grid-template-columns:minmax(250px,292px) minmax(0,1fr) minmax(290px,350px);grid-template-areas:"expl main side";gap:14px 26px;align-items:start}
+.main{grid-area:main;min-width:0}
+.side{grid-area:side;min-width:0;border-left:1px solid var(--line);padding-left:22px;display:flex;flex-direction:column;gap:12px}
+.expl{grid-area:expl;min-width:0;background:var(--card);border-radius:16px;padding:14px 16px 16px}
+h2{font-family:var(--display);font-weight:600;font-size:1.05rem;margin:0;letter-spacing:-0.005em}
+h3{font-family:var(--display);font-weight:600;font-size:.98rem;margin:0}
+.realbar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 18px;margin-bottom:4px}
+.score{display:flex;gap:18px;align-items:baseline;font-variant-numeric:tabular-nums}
+.score .big{font-family:var(--display);font-weight:700;font-size:1.6rem;line-height:1}
+.score .lab{color:var(--muted);font-size:.85rem;margin-right:5px}
+.score .j .big{color:var(--iso)}
+.phead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 16px;margin:8px 0 2px}
+.phead .legend{flex:1;min-width:0}
+.phead .val{font-variant-numeric:tabular-nums;font-size:.9rem;color:var(--muted)}
+.phead .val b{color:var(--ink);font-size:1.05rem}
+.legend{display:flex;flex-wrap:wrap;gap:2px 14px;font-size:.84rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.chip{width:12px;height:12px;border-radius:3px;display:inline-block}
+.dot{width:9px;height:9px;border-radius:50%;border:1.6px solid var(--ink);display:inline-block}
+.sq{width:9px;height:9px;background:var(--rain);display:inline-block}
+.ln{width:16px;height:2px;background:var(--ink);display:inline-block}
+.thin{width:16px;height:0;border-top:2px dotted var(--muted);display:inline-block}
+canvas{display:block;width:100%}
+#cvHydro{height:clamp(150px,calc(var(--vh-free)*0.40),440px);cursor:crosshair}
+#cvIso{height:clamp(110px,calc(var(--vh-free)*0.30),320px);cursor:crosshair}
+#cvDotty{height:clamp(90px,calc(var(--vh-free)*0.22),220px)}
+.slider-row{padding-left:48px;margin-top:2px}
+#share{width:100%;margin:0;height:30px;-webkit-appearance:none;appearance:none;background:transparent;cursor:grab}
+#share:active{cursor:grabbing}
+#share::-webkit-slider-runnable-track{height:8px;border-radius:4px;background:linear-gradient(90deg,var(--line),var(--overland))}
+#share::-moz-range-track{height:8px;border-radius:4px;background:linear-gradient(90deg,var(--line),var(--overland))}
+#share::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:var(--panel);border:3px solid var(--ink);margin-top:-8px;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+#share::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--panel);border:3px solid var(--ink)}
+.ends{display:flex;justify-content:space-between;padding-left:48px;font-size:.84rem;color:var(--muted)}
+.ends .mid{text-align:center}
+.insight{margin:8px 0 0;font-size:1rem;max-width:100ch}
+.insight b{font-variant-numeric:tabular-nums}
+.insight .was{color:var(--muted)}
+
+#cvTern{aspect-ratio:1.12/1;height:auto}
+.shares{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.share{border-top:4px solid;padding-top:4px}
+.share .v{font-family:var(--display);font-weight:700;font-size:1.45rem;line-height:1.05;font-variant-numeric:tabular-nums}
+.share .n{font-size:.8rem;color:var(--muted);line-height:1.2}
+.params{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 10px;align-items:center;font-size:.84rem}
+.params .pl{color:var(--muted);white-space:nowrap}
+.params .pv{font-variant-numeric:tabular-nums;text-align:right;min-width:3.8em;font-weight:700}
+.params canvas{height:20px}
+.params .sep{grid-column:1/-1;font-size:.78rem;color:var(--iso);font-weight:700;margin-top:4px}
+.note{font-size:.79rem;color:var(--muted);margin:0}
+
+/* explainer */
+.expl h2{margin-bottom:2px}
+.expl p{margin:5px 0;font-size:.88rem;line-height:1.42}
+.nuclei{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0 2px;text-align:center}
+.nuclei svg{width:100%;max-width:clamp(60px,9vh,104px);height:auto;display:block;margin:0 auto}
+.nuclei .iso-name{font-family:var(--display);font-weight:700;font-size:1.1rem;line-height:1.1}
+.nuclei .iso-name.heavy{color:var(--iso)}
+.nuclei .meta{font-size:.78rem;color:var(--muted);line-height:1.3}
+.pr{fill:var(--ink)} .nu{fill:var(--panel);stroke:var(--muted);stroke-width:1.2} .nx{fill:var(--iso)}
+.nkey{display:flex;justify-content:center;gap:14px;font-size:.76rem;color:var(--muted)}
+.nkey span{display:inline-flex;align-items:center;gap:5px}
+.nkey i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.deltabox{background:var(--panel);border-radius:10px;padding:7px 10px;margin:6px 0 8px;font-size:.9rem;text-align:center}
+.deltabox .eq{font-size:.92rem;line-height:1.5}
+.deltabox .eq .d{color:var(--iso);font-weight:700}
+.deltabox .fine{font-size:.76rem;color:var(--muted);margin-top:3px}
+#cvRuler{height:66px;cursor:default}
+.probe{display:grid;grid-template-columns:auto 1fr auto;gap:0 8px;font-size:.82rem;line-height:1.35;align-items:center;margin-top:2px}
+.probe .c{width:10px;height:10px;border-radius:2px;display:inline-block}
+.probe .pv{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.probe .stream{font-weight:700}
+.atoms{font-size:.82rem;line-height:1.38;margin-top:5px;color:var(--ink)}
+.atoms b{color:var(--iso)}
+
+footer{margin-top:12px;padding-top:9px;border-top:1px solid var(--line);font-size:.8rem;color:var(--muted);display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 24px}
+footer .model{max-width:120ch}
+kbd{font-family:var(--body);font-size:.76rem;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--panel);color:var(--ink)}
+
+@media (max-width:1279px){
+  .grid{grid-template-columns:minmax(0,1fr) minmax(290px,340px);grid-template-areas:"main side" "main expl"}
+}
+@media (max-width:900px){
+  .grid{grid-template-columns:1fr;grid-template-areas:"main" "side" "expl"}
+  .side{border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:14px}
+  .ends .mid{display:none}
+  #cvHydro{height:220px} #cvIso{height:160px} #cvDotty{height:130px}
+}
+.tabs{display:inline-flex;gap:2px;background:var(--card);border-radius:999px;padding:3px;margin-left:10px;vertical-align:middle}
+.tabs button{border:0;background:transparent;padding:4px 13px;font-size:.88rem;border-radius:999px}
+.tabs button[aria-selected="true"]{background:var(--panel);font-weight:700;box-shadow:0 0 0 1px var(--line)}
+.realbar h2{display:inline}
+.cm{display:none}
+.show-cm .ts{display:none}
+.show-cm .cm{display:block}
+.cmhead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 14px;margin:8px 0 2px;font-size:.86rem;color:var(--muted)}
+.seg.small{border-width:1px;border-color:var(--line)}
+.seg.small button{color:var(--ink);font-weight:400;padding:4px 12px;font-size:.86rem}
+.seg.small button[aria-pressed="true"]{background:var(--ink);color:var(--bg);font-weight:700}
+.cmwrap{display:flex;gap:16px;align-items:flex-start}
+.cmfig{flex:1;min-width:0}
+#cmSvg{display:block;width:100%;height:clamp(280px,calc(var(--vh-free)*0.55),640px)}
+.cmnotes{font-size:.82rem;line-height:1.34;display:flex;flex-direction:column;gap:7px;margin:8px 0 12px}
+#explCm{display:none}
+.show-cm #explCm{display:block}
+.show-cm #explIso{display:none}
+.cmnotes .nt{display:grid;grid-template-columns:24px 1fr;gap:0 8px;align-items:start}
+.cmnotes .nt b{display:block;font-size:.85rem;color:var(--ink)}
+.cmnotes .nt span{color:var(--muted)}
+.cmnotes svg{width:24px;height:14px;margin-top:2px}
+.cmbar{margin-top:6px}
+.cmbar button{padding:5px 12px;font-size:.86rem}
+#cvDay{height:clamp(130px,calc(var(--vh-free)*0.28),250px);width:100%;cursor:crosshair}
+.cmt{font-family:var(--body);paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
+.cmt .t{font-weight:700;font-size:17px}
+.cmt .s{font-size:14.5px;fill:var(--muted)}
+@media (max-width:600px){#cmSvg{height:280px}}
+.exhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:-2px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.exlab{font-size:.8rem;color:var(--muted)}
+.switch{padding:4px 10px 4px 5px;font-size:.84rem;gap:7px;background:var(--panel)}
+.switch .knob{width:28px;height:16px;border-radius:999px;background:var(--line);position:relative;transition:background .15s}
+.switch .knob::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--panel);box-shadow:0 0 0 1px rgba(0,0,0,.15);transition:transform .15s}
+.switch[aria-checked="true"]{border-color:var(--iso);color:var(--iso);font-weight:700}
+.switch[aria-checked="true"] .knob{background:var(--iso)}
+.switch[aria-checked="true"] .knob::after{transform:translateX(12px)}
+.defs{display:none}
+.show-defs .defs{display:block}
+.show-defs #explCm,.show-defs #explIso,.show-defs .probewrap{display:none}
+.defs h4{font-family:var(--display);font-weight:600;font-size:.86rem;color:var(--iso);margin:10px 0 4px}
+.defs dl{margin:0}
+.defs dt{font-weight:700;font-size:.88rem;margin-top:7px}
+.defs dd{margin:1px 0 0;font-size:.84rem;line-height:1.38;color:var(--muted)}
+@media (prefers-reduced-motion: reduce){.switch .knob,.switch .knob::after{transition:none}}
+.no-expl .expl{display:none}
+.no-expl .grid{grid-template-columns:minmax(0,1fr) minmax(290px,350px);grid-template-areas:"main side"}
+#basics[aria-pressed="true"]{border-color:var(--iso);color:var(--iso);font-weight:700}
+@media (max-width:900px){.no-expl .grid{grid-template-columns:1fr;grid-template-areas:"main" "side"}}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>One hydrograph, many catchments</h1>
+    <p class="sub">Streamflow alone accepts catchments that work in very different ways. Add stream δ¹⁸O to the objective function and watch most of them drop out.</p>
+  </header>
+
+  <div class="bar">
+    <div class="group" role="group" aria-label="Objective function">
+      <div class="seg" role="group" aria-label="Objective preset">
+        <button id="segQ" aria-pressed="true">Streamflow only</button>
+        <button id="segI" aria-pressed="false">Streamflow + δ¹⁸O</button>
+      </div>
+      <label class="wctl">δ¹⁸O weight <i>w</i> <input type="range" id="w" min="0" max="1" step="0.01" value="0" aria-label="Weight of isotope fit in the objective"><output id="wv">0.00</output></label>
+    </div>
+    <div class="group" role="group" aria-label="View controls">
+      <button id="basics" aria-pressed="true" aria-controls="expl">Explainer</button>
+      <button id="play" class="primary" aria-pressed="false">Play sweep</button>
+      <label class="toggle"><input type="checkbox" id="env"> Envelope</label>
+      <label class="toggle"><input type="checkbox" id="truth"> Reveal truth</label>
+      <label class="thresh">Accept if <i>J</i> ≥ <output id="thv">0.88</output>
+        <input type="range" id="th" min="0.6" max="0.96" step="0.01" value="0.88" aria-label="Acceptance threshold on J"></label>
+      <button id="resample">New ensemble</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- beginner explainer -->
+    <aside class="expl" id="expl" aria-label="Explainer">
+      <div class="exhead"><span class="exlab">Explainer</span>
+        <button class="switch" id="defsBtn" role="switch" aria-checked="false"><span class="knob" aria-hidden="true"></span>Definitions</button></div>
+      <div class="defs" id="defs">
+        <h2>Definitions</h2>
+        <h4>Modelling</h4>
+        <dl>
+          <dt>Equifinality</dt><dd>Many different models or parameter sets reproduce the observations equally well. A good fit alone does not prove the internal processes are right.</dd>
+          <dt>Realization</dt><dd>One parameter set drawn at random from its prior range and run through the model. This tool runs 30,000.</dd>
+          <dt>History matching</dt><dd>Keeping only the realizations whose simulations reproduce past observations. Also called calibration.</dd>
+          <dt>Objective function <i>J</i></dt><dd>One score of model–data agreement used to rank realizations. Here a weighted mix of the streamflow fit and the δ¹⁸O fit.</dd>
+          <dt>NSE</dt><dd>Nash–Sutcliffe efficiency: 1 minus squared model error divided by the variance of the data. 1 is perfect; 0 is no better than the observed mean.</dd>
+          <dt>Accepted (behavioral)</dt><dd>Realizations whose <i>J</i> passes the threshold. All of them are treated as plausible.</dd>
+        </dl>
+        <h4>Hydrology and tracers</h4>
+        <dl>
+          <dt>Hydrograph separation</dt><dd>Splitting streamflow into the contributions of different pathways or water sources.</dd>
+          <dt>Event and pre-event water</dt><dd>Rain from the current storm versus water already stored in the catchment before it. A tracer can tell them apart; the hydrograph cannot.</dd>
+          <dt>Tracer</dt><dd>A measurable property of water, such as δ¹⁸O, that labels where the water came from.</dd>
+          <dt>Recession constant <i>k</i></dt><dd>Response time of a store, from <i>Q</i> = <i>S</i>/<i>k</i>. Small <i>k</i> drains fast; large <i>k</i> sustains slow baseflow.</dd>
+          <dt>Runoff coefficient <i>c</i></dt><dd>Fraction of rain that ends up as streamflow. The rest is lost, mostly to evapotranspiration.</dd>
+          <dt>Mixing volume</dt><dd>Stored water that mixes with new arrivals but never drains. It changes the tracer signal, not the streamflow.</dd>
+          <dt>Celerity and velocity</dt><dd>How fast a flow response travels versus how fast water molecules travel. Streamflow follows celerity; tracers follow velocity.</dd>
+        </dl>
+      </div>
+      <div id="explCm"><h2>Reading the catchment</h2><div class="cmnotes" id="cmNotes"></div></div>
+      <div id="explIso">
+      <h2>What is δ¹⁸O?</h2>
+      <p>Each water molecule holds one oxygen atom. Almost all are <b>¹⁶O</b>; about 2 in 1,000 are the heavier <b style="color:var(--iso)">¹⁸O</b>, with two extra neutrons.</p>
+      <div class="nuclei">
+        <div><svg id="nuc16" viewBox="0 0 100 100" aria-label="Oxygen-16 nucleus: 8 protons and 8 neutrons"></svg>
+          <div class="iso-name">¹⁶O</div><div class="meta">8 protons, 8 neutrons<br>99.76% of oxygen</div></div>
+        <div><svg id="nuc18" viewBox="0 0 100 100" aria-label="Oxygen-18 nucleus: 8 protons and 10 neutrons"></svg>
+          <div class="iso-name heavy">¹⁸O</div><div class="meta">8 protons, 10 neutrons<br>0.20% of oxygen</div></div>
+      </div>
+      <div class="nkey"><span><i style="background:var(--ink)"></i>proton</span><span><i style="border:1.2px solid var(--muted)"></i>neutron</span><span><i style="background:var(--iso)"></i>extra neutron</span></div>
+      <p>Being about 11% heavier, H₂¹⁸O evaporates less readily and rains out sooner, so each storm and season carries its own fingerprint.</p>
+      <div class="deltabox">
+        <div class="eq"><span class="d">δ¹⁸O</span> = (<i>R</i><sub>sample</sub> ⁄ <i>R</i><sub>ocean</sub> − 1) × 1000 ‰</div>
+        <div class="fine"><i>R</i> = ¹⁸O ⁄ ¹⁶O; ocean standard (VSMOW) <i>R</i> ≈ 0.0020052.<br>There is no δ¹⁶O: ¹⁶O is the denominator.</div>
+      </div>
+      </div>
+      <div class="probewrap">
+      <h3 id="probeTitle">Fingerprints on day 97</h3><p class="note" style="margin:0">Hover or tap the plots to change the day.</p>
+      <canvas id="cvRuler" role="img" aria-label="δ18O scale with values of rain, each store and the stream for the selected day"></canvas>
+      <div class="probe" id="probe"></div>
+      <div class="atoms" id="atoms"></div>
+      </div>
+    </aside>
+
+    <!-- main analysis -->
+    <section class="main" aria-label="Selected realization">
+      <div class="realbar">
+        <div><h2 id="realTitle">Realization</h2><span class="tabs" role="tablist" aria-label="View"><button role="tab" id="tabTs" aria-selected="true" aria-controls="tsView">Time series</button><button role="tab" id="tabCm" aria-selected="false" aria-controls="cmView">Catchment</button></span></div>
+        <div class="score">
+          <span class="j"><span class="lab">Objective <i>J</i></span><span class="big" id="jv">0.00</span></span>
+          <span><span class="lab">Volume error</span><span class="big" id="vol">0%</span></span>
+        </div>
+      </div>
+
+      <div class="ts" id="tsView">
+      <div class="phead"><h3>Streamflow</h3><div class="legend">
+        <span><i class="chip" style="background:var(--overland)"></i>Overland flow</span>
+        <span><i class="chip" style="background:var(--shallow)"></i>Shallow subsurface</span>
+        <span><i class="chip" style="background:var(--ground)"></i>Groundwater</span>
+        <span><i class="dot"></i>Observed</span>
+        <span><i class="ln"></i>Simulated</span>
+      </div><span class="val">NSE<sub>Q</sub> <b id="nq">0.00</b></span></div>
+      <canvas id="cvHydro" role="img" aria-label="Rainfall, observed streamflow and simulated streamflow split by pathway"></canvas>
+
+      <div class="phead"><h3>Stream δ¹⁸O</h3><div class="legend">
+        <span><i class="sq"></i>Rain (size: amount)</span>
+        <span><i class="dot"></i>Stream sample</span>
+        <span><i class="ln"></i>Simulated stream</span>
+        <span><i class="thin"></i>Water leaving each store</span>
+      </div><span class="val">NSE<sub>δ</sub> <b id="nd">0.00</b></span></div>
+      <canvas id="cvIso" role="img" aria-label="Rain, observed stream and simulated stream δ18O"></canvas>
+      </div>
+
+      <div class="cm" id="cmView">
+        <div class="cmhead">
+          <span class="group"><span class="seg small" role="group" aria-label="Arrow scaling"><button id="modeDay" aria-pressed="true">This day</button><button id="modePer" aria-pressed="false">Whole 150 days</button></span><button id="playDays" aria-pressed="false" style="padding:4px 12px;font-size:.86rem">Play days</button></span>
+          <span>Arrow width is proportional to water flux. Hover or tap the timeline to change the day.</span>
+        </div>
+        <div class="cmwrap">
+          <div class="cmfig">
+            <svg id="cmSvg" viewBox="34 20 862 452" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Schematic catchment block with flow paths scaled to the selected realization"></svg>
+            <div class="cmbar"><canvas id="cvDay" role="img" aria-label="Hydrograph separation timeline for choosing the day"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phead"><h3>Objective across the ensemble</h3><span class="formula"><i>J</i> = (1 − <span class="w">w</span>)·NSE<sub>Q</sub> + <span class="w">w</span>·NSE<sub>δ</sub></span><span class="val">Each dot is one parameter set. Click to load it.</span></div>
+      <canvas id="cvDotty" role="img" aria-label="Objective J against share of streamflow from overland flow"></canvas>
+      <div class="slider-row"><input type="range" id="share" min="0" max="1000" step="1" value="300" aria-label="Share of streamflow delivered by overland flow"></div>
+      <div class="ends"><span>Little overland flow</span><span class="mid">Share of streamflow from overland flow</span><span>Mostly overland flow</span></div>
+      <p class="insight" id="insight" aria-live="polite"></p>
+    </section>
+
+    <!-- process space -->
+    <aside class="side" aria-label="Internal behaviour">
+      <div>
+        <h2>Where the streamflow comes from</h2>
+        <canvas id="cvTern" role="img" aria-label="Ternary diagram of streamflow source shares"></canvas>
+      </div>
+      <div class="shares">
+        <div class="share" style="border-color:var(--overland)"><div class="v" id="sO">0%</div><div class="n">Overland</div></div>
+        <div class="share" style="border-color:var(--shallow)"><div class="v" id="sS">0%</div><div class="n">Shallow subsurface</div></div>
+        <div class="share" style="border-color:var(--ground)"><div class="v" id="sG">0%</div><div class="n">Groundwater</div></div>
+      </div>
+      <div>
+        <h2 style="margin-bottom:4px">Parameters of this realization</h2>
+        <div class="params" id="params"></div>
+        <p class="note" style="margin-top:6px">Grey: spread of models accepted with streamflow only (outline once δ¹⁸O is added). Violet: spread accepted with the current objective. Flat means unconstrained.</p>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    <span class="model">Synthetic experiment. Three parallel linear reservoirs; each is fully mixed over its moving water plus a passive mixing volume that changes δ¹⁸O but not streamflow (overland fixed at 0.5 mm). Eight parameters, 30,000 Monte Carlo samples from uniform priors. Observed flow = true model + 12% noise; stream δ¹⁸O sampled every 2 days ± 0.15‰. Rain δ¹⁸O is stylized: a seasonal drift from −15‰ to −7‰ plus four strongly depleted storms.</span>
+    <span><kbd>←</kbd> <kbd>→</kbd> move &nbsp; <kbd>I</kbd> isotopes &nbsp; <kbd>B</kbd> explainer &nbsp; <kbd>D</kbd> definitions &nbsp; <kbd>C</kbd> catchment &nbsp; <kbd>Space</kbd> play &nbsp; <kbd>T</kbd> truth &nbsp; <kbd>E</kbd> envelope</span>
+  </footer>
+</div>
+
+<script>
+(()=>{
+"use strict";
+// ================= utilities =================
+function rng(seed){let s=seed>>>0;return()=>{s=(s+0x6D2B79F5)>>>0;let t=s;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;};}
+function gauss(r){let u=0;while(!u)u=r();const v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+const $=id=>document.getElementById(id);
+const pct=x=>Math.round(x*100)+"%";
+const fmtD=v=>(v<0?"−":"")+Math.abs(v).toFixed(1)+"‰";
+const reduceMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// ================= forcing =================
+const N=150, NS=30000, VO=0.5, C0=-15, CG=-12, R_VSMOW=0.0020052;
+const P=(()=>{const r=rng(7),P=new Float64Array(N);for(let t=0;t<N;t++) if(r()<0.28) P[t]=-Math.log(r())*7;[22,58,97,124].forEach(d=>P[d]+=25+r()*20);return P;})();
+const D=(()=>{const r=rng(21),D=new Float64Array(N);for(let t=0;t<N;t++)D[t]=-15+8*t/(N-1)+1.0*gauss(r);
+  const big={22:-21,58:-20,97:-19,124:-18};for(const d in big){D[d]=big[d];for(const k of[-1,1]){const t=+d+k;if(P[t]>0)D[t]=big[d]+0.5;}}return D;})();
+
+// ================= model =================
+const PARAMS=[
+  {name:"Runoff coefficient",      lo:0.3, hi:0.8,  log:false, fmt:v=>v.toFixed(2)},
+  {name:"Rain to overland",        lo:0,   hi:1,    log:false, fmt:v=>v.toFixed(2)},
+  {name:"Rain to shallow",         lo:0,   hi:1,    log:false, fmt:v=>v.toFixed(2)},
+  {name:"Overland recession",      lo:0.3, hi:2,    log:true,  fmt:v=>v.toFixed(1)+" d"},
+  {name:"Shallow recession",       lo:2.5, hi:20,   log:true,  fmt:v=>v.toFixed(1)+" d"},
+  {name:"Groundwater recession",   lo:25,  hi:200,  log:true,  fmt:v=>Math.round(v)+" d"},
+  {name:"Shallow mixing volume",   lo:10,  hi:150,  log:true,  fmt:v=>Math.round(v)+" mm", iso:true},
+  {name:"Groundwater mixing vol.", lo:100, hi:1500, log:true,  fmt:v=>Math.round(v)+" mm", iso:true},
+];
+const NP=PARAMS.length;
+const TRUTH=[0.5,0.30,0.35,1.0,6,50,50,500];
+
+function simFull(p){
+  const [c,fo,fs,ko,ks,kg,Vs,Vg]=p, fg=1-fo-fs;
+  const ao=1-Math.exp(-1/ko),as=1-Math.exp(-1/ks),ag=1-Math.exp(-1/kg);
+  let So=0,Ss=0,Sg=0,Mo=0,Ms=0,Mg=0;
+  const o={q:new Float64Array(N),qo:new Float64Array(N),qs:new Float64Array(N),qg:new Float64Array(N),d:new Float64Array(N),co:new Float64Array(N),cs:new Float64Array(N),cg:new Float64Array(N),So:new Float64Array(N),Ss:new Float64Array(N),Sg:new Float64Array(N)};
+  for(let pass=0;pass<2;pass++){
+    if(pass){Mo=C0*(So+VO);Ms=C0*(Ss+Vs);Mg=CG*(Sg+Vg);}
+    for(let t=0;t<N;t++){
+      const pe=c*P[t]; So+=pe*fo; Ss+=pe*fs; Sg+=pe*fg;
+      const a=So*ao,b=Ss*as,g=Sg*ag;
+      if(pass){
+        Mo+=pe*fo*D[t]; Ms+=pe*fs*D[t]; Mg+=pe*fg*D[t];
+        const Co=Mo/(So+VO),Cs=Ms/(Ss+Vs),Cg=Mg/(Sg+Vg);
+        Mo-=a*Co; Ms-=b*Cs; Mg-=g*Cg;
+        o.qo[t]=a;o.qs[t]=b;o.qg[t]=g;o.q[t]=a+b+g;o.co[t]=Co;o.cs[t]=Cs;o.cg[t]=Cg;o.d[t]=(a*Co+b*Cs+g*Cg)/(a+b+g);
+      }
+      So-=a; Ss-=b; Sg-=g;
+      if(pass){o.So[t]=So;o.Ss[t]=Ss;o.Sg[t]=Sg;}
+    }
+  }
+  return o;
+}
+const T=simFull(TRUTH);
+const obs=(()=>{const r=rng(11);return T.q.map(v=>v*Math.exp(0.12*gauss(r)));})();
+const sdays=[];for(let t=0;t<N;t+=2)sdays.push(t);
+const dobs=(()=>{const r=rng(31);return sdays.map(t=>T.d[t]+0.15*gauss(r));})();
+const qMean=obs.reduce((a,b)=>a+b,0)/N, qDen=obs.reduce((a,b)=>a+(b-qMean)**2,0), qSum=qMean*N;
+const dMean=dobs.reduce((a,b)=>a+b,0)/dobs.length, dDen=dobs.reduce((a,b)=>a+(b-dMean)**2,0);
+function scores(S){let e=0;for(let t=0;t<N;t++)e+=(S.q[t]-obs[t])**2;let f=0;sdays.forEach((t,k)=>f+=(S.d[t]-dobs[k])**2);return [1-e/qDen,1-f/dDen];}
+function sharesOf(S){let o=0,s=0,g=0;for(let t=0;t<N;t++){o+=S.qo[t];s+=S.qs[t];g+=S.qg[t];}const tot=o+s+g;return [o/tot,s/tot,g/tot,tot];}
+const truthSc=scores(T), truthSh=sharesOf(T);
+
+// ================= ensemble =================
+let PR,NQ,ND,SO,SS,SG,JJ;
+function sampleEnsemble(seed){
+  const R=rng(seed), lu=(lo,hi)=>Math.exp(Math.log(lo)+R()*Math.log(hi/lo));
+  PR=new Float64Array(NS*NP);NQ=new Float64Array(NS);ND=new Float64Array(NS);SO=new Float64Array(NS);SS=new Float64Array(NS);SG=new Float64Array(NS);JJ=new Float64Array(NS);
+  const isS=new Uint8Array(N);sdays.forEach(t=>isS[t]=1);
+  for(let i=0;i<NS;i++){
+    const e0=-Math.log(R()),e1=-Math.log(R()),e2=-Math.log(R()),es=e0+e1+e2;
+    const c=0.3+0.5*R(),fo=e0/es,fs=e1/es,fg=1-fo-fs,ko=lu(0.3,2),ks=lu(2.5,20),kg=lu(25,200),Vs=lu(10,150),Vg=lu(100,1500);
+    const o=i*NP;PR[o]=c;PR[o+1]=fo;PR[o+2]=fs;PR[o+3]=ko;PR[o+4]=ks;PR[o+5]=kg;PR[o+6]=Vs;PR[o+7]=Vg;
+    const ao=1-Math.exp(-1/ko),as=1-Math.exp(-1/ks),ag=1-Math.exp(-1/kg);
+    let So=0,Ss=0,Sg=0,Mo=0,Ms=0,Mg=0,eq=0,ed=0,so=0,ss=0,sg=0,k=0;
+    for(let pass=0;pass<2;pass++){
+      if(pass){Mo=C0*(So+VO);Ms=C0*(Ss+Vs);Mg=CG*(Sg+Vg);}
+      for(let t=0;t<N;t++){
+        const pe=c*P[t]; So+=pe*fo; Ss+=pe*fs; Sg+=pe*fg;
+        const a=So*ao,b=Ss*as,g=Sg*ag;
+        if(pass){
+          Mo+=pe*fo*D[t]; Ms+=pe*fs*D[t]; Mg+=pe*fg*D[t];
+          const Co=Mo/(So+VO),Cs=Ms/(Ss+Vs),Cg=Mg/(Sg+Vg);
+          Mo-=a*Co; Ms-=b*Cs; Mg-=g*Cg;
+          const q=a+b+g, dq=q-obs[t]; eq+=dq*dq; so+=a; ss+=b; sg+=g;
+          if(isS[t]){const dd=(a*Co+b*Cs+g*Cg)/q-dobs[k++]; ed+=dd*dd;}
+        }
+        So-=a; Ss-=b; Sg-=g;
+      }
+    }
+    const tot=so+ss+sg; NQ[i]=1-eq/qDen; ND[i]=1-ed/dDen; SO[i]=so/tot; SS[i]=ss/tot; SG[i]=sg/tot;
+  }
+}
+const pOf=i=>Array.from(PR.subarray(i*NP,i*NP+NP));
+
+// ================= state =================
+const st={w:0,th:0.88,beh:[],behQ:[],sel:0,best:0,lo:0,hi:1,env:false,truth:false,playing:false,dir:1,
+  seed:3,cur:null,probe:97,hist:null,histQ:null,band:null,envDirty:true};
+
+function histOf(list){
+  const NB=26;return PARAMS.map((pp,j)=>{const h=new Float64Array(NB);for(const i of list){const v=PR[i*NP+j];const u=pp.log?Math.log(v/pp.lo)/Math.log(pp.hi/pp.lo):(v-pp.lo)/(pp.hi-pp.lo);h[Math.min(NB-1,Math.max(0,Math.floor(u*NB)))]++;}let m=0;for(const x of h)if(x>m)m=x;return h.map(x=>m?x/m:0);});
+}
+function updateQonly(){const b=[];for(let i=0;i<NS;i++) if(NQ[i]>=st.th) b.push(i);st.behQ=b;st.histQ=histOf(b);}
+function updateBehavioral(){
+  const w=st.w,b=[];let lo=1,hi=0,best=0;
+  for(let i=0;i<NS;i++){const j=(1-w)*NQ[i]+w*ND[i];JJ[i]=j;if(j>JJ[best])best=i;if(j>=st.th){b.push(i);if(SO[i]<lo)lo=SO[i];if(SO[i]>hi)hi=SO[i];}}
+  st.beh=b;st.best=best;st.lo=b.length?lo:0;st.hi=b.length?hi:1;
+  st.hist=histOf(b);st.envDirty=true;
+}
+function computeEnvelope(){
+  st.envDirty=false; const b=st.beh; if(!b.length){st.band=null;return;}
+  const stride=Math.max(1,Math.ceil(b.length/1500)), list=b.filter((_,k)=>k%stride===0), n=list.length;
+  const Mq=new Float64Array(n*N),Md=new Float64Array(n*N);
+  list.forEach((i,k)=>{const S=simFull(pOf(i));Mq.set(S.q,k*N);Md.set(S.d,k*N);});
+  const band={qlo:new Float64Array(N),qhi:new Float64Array(N),dlo:new Float64Array(N),dhi:new Float64Array(N)},col=new Float64Array(n);
+  const lo=Math.floor(0.05*(n-1)),hi=Math.ceil(0.95*(n-1));
+  for(let t=0;t<N;t++){
+    for(let k=0;k<n;k++)col[k]=Mq[k*N+t];col.sort();band.qlo[t]=col[lo];band.qhi[t]=col[hi];
+    for(let k=0;k<n;k++)col[k]=Md[k*N+t];col.sort();band.dlo[t]=col[lo];band.dhi[t]=col[hi];
+  }
+  st.band=band;
+}
+function range90(list,arr){if(!list.length)return[0,0];const a=list.map(i=>arr[i]).sort((x,y)=>x-y);return[a[Math.floor(0.05*(a.length-1))],a[Math.ceil(0.95*(a.length-1))]];}
+function median(list,arr){const a=list.map(i=>arr[i]).sort((x,y)=>x-y);return a[Math.floor(a.length/2)];}
+
+function pickAtShare(s){
+  if(!st.beh.length) return st.best;
+  let bi=-1,bj=-Infinity,ni=st.beh[0],nd=Infinity;
+  for(const i of st.beh){const d=Math.abs(SO[i]-s);if(d<0.0075&&JJ[i]>bj){bj=JJ[i];bi=i;}if(d<nd){nd=d;ni=i;}}
+  return bi>=0?bi:ni;
+}
+
+function select(i,{syncSlider=false}={}){
+  st.sel=i; st.cur=simFull(pOf(i));
+  if(syncSlider) $("share").value=Math.round(SO[i]*1000);
+  const vol=(sharesOf(st.cur)[3]-qSum)/qSum;
+  $("jv").textContent=JJ[i].toFixed(3);
+  $("nq").textContent=NQ[i].toFixed(3);
+  $("nd").textContent=ND[i].toFixed(3);
+  $("vol").textContent=(vol>=0?"+":"−")+Math.abs(vol*100).toFixed(1)+"%";
+  $("realTitle").textContent=(JJ[i]>=st.th?"Accepted realization #":"Rejected realization #")+(i+1);
+  $("sO").textContent=pct(SO[i]);$("sS").textContent=pct(SS[i]);$("sG").textContent=pct(SG[i]);
+  requestDraw();
+}
+
+function insight(){
+  const el=$("insight"),b=st.beh,bq=st.behQ;
+  if(!b.length){el.innerHTML=`No realization reaches <i>J</i> ≥ ${st.th.toFixed(2)}. Lower the threshold to see an accepted set.`;return;}
+  const r=(list,arr)=>{const [a,c]=range90(list,arr);return `${pct(a)}–${pct(c)}`;};
+  let txt;
+  if(st.w===0){
+    txt=`With streamflow only, <b>${b.length.toLocaleString()}</b> of ${NS.toLocaleString()} realizations are accepted. Across the middle 90% of them, overland flow supplies <b>${r(b,SO)}</b> of streamflow, shallow subsurface <b>${r(b,SS)}</b> and groundwater <b>${r(b,SG)}</b>. The hydrograph cannot tell these catchments apart.`;
+  }else{
+    txt=`Adding δ¹⁸O (<i>w</i> = ${st.w.toFixed(2)}) changes the accepted set from <span class="was">${bq.length.toLocaleString()}</span> to <b>${b.length.toLocaleString()}</b>. Middle-90% ranges: overland <b>${r(b,SO)}</b> <span class="was">(was ${r(bq,SO)})</span>, shallow <b>${r(b,SS)}</b> <span class="was">(was ${r(bq,SS)})</span>, groundwater <b>${r(b,SG)}</b> <span class="was">(was ${r(bq,SG)})</span>.`;
+    if(st.w>=0.85) txt+=` At this weight the hydrograph hardly counts: the median accepted model has NSE<sub>Q</sub> = ${median(b,NQ).toFixed(2)}. Isotopes constrain mixing, not water volume.`;
+  }
+  if(st.truth) txt+=` True catchment: <b>${pct(truthSh[0])}</b> overland, <b>${pct(truthSh[1])}</b> shallow, <b>${pct(truthSh[2])}</b> groundwater.`;
+  el.innerHTML=txt;
+}
+
+// ================= drawing =================
+const C={};
+function readColors(){const cs=getComputedStyle(document.documentElement);["bg","panel","card","ink","muted","line","overland","shallow","ground","iso","truth","rain"].forEach(k=>C[k]=cs.getPropertyValue("--"+k).trim());}
+function prep(cv){const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return null;if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}const ctx=cv.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);return{ctx,w,h};}
+function alpha(hex,a){if(hex&&hex[0]==="#"){const n=parseInt(hex.slice(1),16);return`rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;}return hex;}
+function niceMax(v){const e=Math.pow(10,Math.floor(Math.log10(v)));const m=v/e;return(m<=1?1:m<=2?2:m<=5?5:10)*e;}
+const FONT=(s,wt)=>`${wt||400} ${s}px "Atkinson Hyperlegible","Segoe UI",Arial,sans-serif`;
+function star(ctx,x,y,r){ctx.beginPath();for(let k=0;k<10;k++){const a=-Math.PI/2+k*Math.PI/5,rr=k%2?r*0.45:r;ctx.lineTo(x+rr*Math.cos(a),y+rr*Math.sin(a));}ctx.closePath();}
+function diamond(ctx,x,y,r){ctx.beginPath();ctx.moveTo(x,y-r);ctx.lineTo(x+r,y);ctx.lineTo(x,y+r);ctx.lineTo(x-r,y);ctx.closePath();}
+function path(ctx,X,Y,arr,ok){let pen=false;ctx.beginPath();for(let t=0;t<N;t++){if(ok&&!ok(t)){pen=false;continue;}const x=X(t),y=Y(arr[t]);pen?ctx.lineTo(x,y):ctx.moveTo(x,y);pen=true;}}
+
+// shared time axis for hydrograph and isotope panel
+const TL=48,TR=12;
+const qMax=niceMax(Math.max(...obs)*1.05), pMax=niceMax(Math.max(...P));
+const dLo=Math.floor((Math.min(...D)-1)/2)*2, dHi=Math.ceil((Math.max(...Array.from(D).filter((v,t)=>P[t]>0.3),...dobs)+1)/2)*2;
+let hydroGeom=null;
+
+function drawHydro(){
+  const g=prep($("cvHydro"));if(!g||!st.cur)return;const{ctx,w,h}=g,S=st.cur;
+  const B=22,Tp=4,pw=w-TL-TR,rainH=(h-Tp-B)*0.2,qTop=Tp+rainH+8,qBot=h-B,qH=qBot-qTop;
+  const X=t=>TL+(t+0.5)/N*pw,Y=v=>qBot-v/qMax*qH;hydroGeom={pw};
+  ctx.font=FONT(11.5);ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;
+  for(let k=0;k<=4;k++){const v=qMax*k/4,y=Y(v);ctx.beginPath();ctx.moveTo(TL,y);ctx.lineTo(w-TR,y);ctx.stroke();if(k%2===0||qH>140){ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillText(+v.toFixed(1),TL-6,y);}}
+  ctx.textAlign="center";ctx.textBaseline="top";for(let d=0;d<=N;d+=30)ctx.fillText(d===0?"day 0":d,TL+d/N*pw,qBot+5);
+  ctx.save();ctx.translate(11,(qTop+qBot)/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("mm/d",0,0);ctx.restore();
+  const bw=Math.max(1,pw/N*0.72);ctx.fillStyle=C.rain;for(let t=0;t<N;t++)if(P[t]>0){ctx.fillRect(X(t)-bw/2,Tp,bw,P[t]/pMax*rainH);}
+  ctx.fillStyle=C.muted;ctx.textAlign="left";ctx.textBaseline="top";ctx.fillText("rain",TL+4,Tp);
+  const base=new Float64Array(N);
+  for(const[arr,col]of[[S.qg,C.ground],[S.qs,C.shallow],[S.qo,C.overland]]){
+    ctx.beginPath();for(let t=0;t<N;t++){const y=Y(base[t]+arr[t]);t?ctx.lineTo(X(t),y):ctx.moveTo(X(t),y);}
+    for(let t=N-1;t>=0;t--)ctx.lineTo(X(t),Y(base[t]));ctx.closePath();ctx.fillStyle=alpha(col,0.82);ctx.fill();
+    for(let t=0;t<N;t++)base[t]+=arr[t];
+  }
+  if(st.env&&st.band) band(ctx,X,Y,st.band.qlo,st.band.qhi);
+  path(ctx,X,Y,S.q);ctx.strokeStyle=C.ink;ctx.lineWidth=1.6;ctx.stroke();
+  ctx.lineWidth=1.3;ctx.strokeStyle=C.ink;ctx.fillStyle=C.panel;
+  for(let t=0;t<N;t++){ctx.beginPath();ctx.arc(X(t),Y(obs[t]),2.4,0,Math.PI*2);ctx.fill();ctx.stroke();}
+  crosshair(ctx,X(st.probe),Tp,qBot);
+}
+function band(ctx,X,Y,lo,hi){
+  ctx.beginPath();for(let t=0;t<N;t++){const y=Y(hi[t]);t?ctx.lineTo(X(t),y):ctx.moveTo(X(t),y);}
+  for(let t=N-1;t>=0;t--)ctx.lineTo(X(t),Y(lo[t]));ctx.closePath();ctx.fillStyle=alpha(C.ink,0.15);ctx.fill();
+  ctx.strokeStyle=alpha(C.ink,0.5);ctx.lineWidth=1;ctx.setLineDash([3,3]);for(const a of[lo,hi]){path(ctx,X,Y,a);ctx.stroke();}ctx.setLineDash([]);
+}
+function crosshair(ctx,x,y0,y1){ctx.strokeStyle=alpha(C.iso,0.9);ctx.lineWidth=1.2;ctx.setLineDash([4,3]);ctx.beginPath();ctx.moveTo(x,y0);ctx.lineTo(x,y1);ctx.stroke();ctx.setLineDash([]);}
+
+function drawIso(){
+  const g=prep($("cvIso"));if(!g||!st.cur)return;const{ctx,w,h}=g,S=st.cur;
+  const B=20,Tp=8,pw=w-TL-TR,y0=Tp,y1=h-B;
+  const X=t=>TL+(t+0.5)/N*pw,Y=v=>y1-(v-dLo)/(dHi-dLo)*(y1-y0);
+  ctx.font=FONT(11.5);ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;
+  const step=(dHi-dLo)>14?4:2;
+  for(let v=Math.ceil(dLo/step)*step;v<=dHi;v+=step){const y=Y(v);ctx.beginPath();ctx.moveTo(TL,y);ctx.lineTo(w-TR,y);ctx.stroke();ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillText((v<0?"−":"")+Math.abs(v),TL-6,y);}
+  ctx.textAlign="center";ctx.textBaseline="top";for(let d=0;d<=N;d+=30)ctx.fillText(d===0?"day 0":d,TL+d/N*pw,y1+4);
+  ctx.save();ctx.translate(11,(y0+y1)/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("‰ VSMOW",0,0);ctx.restore();
+  // rain
+  ctx.fillStyle=alpha(C.rain,0.9);
+  for(let t=0;t<N;t++)if(P[t]>0.3){const s=2+Math.sqrt(P[t]/pMax)*7;ctx.fillRect(X(t)-s/2,Y(D[t])-s/2,s,s);}
+  // store outflow signatures
+  ctx.setLineDash([2,3]);ctx.lineWidth=1.6;
+  ctx.strokeStyle=C.ground;path(ctx,X,Y,S.cg);ctx.stroke();
+  ctx.strokeStyle=C.shallow;path(ctx,X,Y,S.cs,t=>S.qs[t]>0.02);ctx.stroke();
+  ctx.strokeStyle=C.overland;path(ctx,X,Y,S.co,t=>S.qo[t]>0.15);ctx.stroke();
+  ctx.setLineDash([]);
+  if(st.env&&st.band) band(ctx,X,Y,st.band.dlo,st.band.dhi);
+  path(ctx,X,Y,S.d);ctx.strokeStyle=C.ink;ctx.lineWidth=1.8;ctx.stroke();
+  ctx.lineWidth=1.3;ctx.strokeStyle=C.ink;ctx.fillStyle=C.panel;
+  sdays.forEach((t,k)=>{ctx.beginPath();ctx.arc(X(t),Y(dobs[k]),2.6,0,Math.PI*2);ctx.fill();ctx.stroke();});
+  crosshair(ctx,X(st.probe),y0-6,y1);
+  ctx.fillStyle=C.iso;ctx.font=FONT(11.5,700);const px=X(st.probe);ctx.textAlign=px>w-70?"right":"left";ctx.textBaseline="top";ctx.fillText("day "+st.probe,px+(px>w-70?-5:5),y0-6);
+}
+
+let dottyGeom=null;
+function drawDotty(){
+  const g=prep($("cvDotty"));if(!g)return;const{ctx,w,h}=g;
+  const L=48+12,R=12,Tp=6,B=4,pw=w-L-R,ph=h-Tp-B,JLO=0.4;
+  const X=s=>L+s*pw,Y=v=>Tp+(1-(Math.max(JLO,Math.min(1,v))-JLO)/(1-JLO))*ph;dottyGeom={X,Y};
+  ctx.font=FONT(11.5);ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;
+  for(const v of[0.4,0.6,0.8,1.0]){const y=Y(v);ctx.beginPath();ctx.moveTo(L-12,y);ctx.lineTo(w-R+12,y);ctx.stroke();ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillText(v.toFixed(1),44,y);}
+  ctx.save();ctx.translate(9,Tp+ph/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.textBaseline="middle";ctx.font="italic "+FONT(12);ctx.fillText("J",0,0);ctx.restore();
+  ctx.fillStyle=alpha(C.muted,0.17);
+  for(let i=0;i<NS;i++)if(JJ[i]<st.th&&JJ[i]>JLO-0.02)ctx.fillRect(X(SO[i])-1,Y(JJ[i])-1,2,2);
+  if(st.beh.length){ctx.fillStyle=alpha(st.w>0?C.iso:C.ink,0.07);ctx.fillRect(X(st.lo),Tp,X(st.hi)-X(st.lo),ph);}
+  ctx.fillStyle=alpha(C.ink,0.55);for(const i of st.beh)ctx.fillRect(X(SO[i])-1.2,Y(JJ[i])-1.2,2.4,2.4);
+  ctx.strokeStyle=C.ink;ctx.setLineDash([5,4]);ctx.lineWidth=1.2;const ty=Y(st.th);ctx.beginPath();ctx.moveTo(L-12,ty);ctx.lineTo(w-R+12,ty);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle=C.ink;ctx.textAlign="right";ctx.textBaseline="top";ctx.fillText("acceptance threshold",w-R,ty+3);
+  ctx.fillStyle=C.panel;ctx.strokeStyle=C.ink;ctx.lineWidth=1.5;diamond(ctx,X(SO[st.best]),Y(JJ[st.best]),5.5);ctx.fill();ctx.stroke();
+  if(st.truth){const x=X(truthSh[0]),tj=(1-st.w)*truthSc[0]+st.w*truthSc[1];ctx.strokeStyle=C.truth;ctx.lineWidth=1.5;ctx.setLineDash([2,3]);ctx.beginPath();ctx.moveTo(x,Tp);ctx.lineTo(x,Tp+ph);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C.truth;star(ctx,x,Y(tj),8);ctx.fill();}
+  const cx=X(SO[st.sel]),cy=Y(JJ[st.sel]);
+  ctx.strokeStyle=alpha(C.ink,0.5);ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(cx,cy+8);ctx.lineTo(cx,h);ctx.stroke();
+  ctx.lineWidth=2.5;ctx.strokeStyle=C.ink;ctx.fillStyle=C.panel;ctx.beginPath();ctx.arc(cx,cy,6.5,0,Math.PI*2);ctx.fill();ctx.stroke();
+}
+
+let ternGeom=null;
+function drawTern(){
+  const g=prep($("cvTern"));if(!g)return;const{ctx,w,h}=g;
+  const pad=22,side=Math.min(w-2*pad-24,(h-2*pad-18)/0.866),cx=w/2,top=pad+6,hh=side*0.866;
+  const VO_=[cx,top],VS_=[cx-side/2,top+hh],VG_=[cx+side/2,top+hh];
+  const pt=(o,s,gg)=>[o*VO_[0]+s*VS_[0]+gg*VG_[0],o*VO_[1]+s*VS_[1]+gg*VG_[1]];ternGeom={pt};
+  ctx.beginPath();ctx.moveTo(...VO_);ctx.lineTo(...VS_);ctx.lineTo(...VG_);ctx.closePath();ctx.fillStyle=alpha(C.ink,0.025);ctx.fill();
+  ctx.strokeStyle=C.line;ctx.lineWidth=1;
+  for(let k=1;k<5;k++){const f=k/5;for(const[a,b]of[[pt(f,1-f,0),pt(f,0,1-f)],[pt(0,f,1-f),pt(1-f,f,0)],[pt(0,1-f,f),pt(1-f,0,f)]]){ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke();}}
+  ctx.strokeStyle=C.muted;ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(...VO_);ctx.lineTo(...VS_);ctx.lineTo(...VG_);ctx.closePath();ctx.stroke();
+  ctx.font=FONT(10.5);ctx.fillStyle=C.muted;ctx.textAlign="right";ctx.textBaseline="middle";
+  for(let k=1;k<5;k++){const f=k/5,p=pt(f,1-f,0);ctx.fillText(k*20+"%",p[0]-5,p[1]);}
+  ctx.font=FONT(12.5,700);ctx.textBaseline="bottom";ctx.textAlign="center";ctx.fillStyle=C.overland;ctx.fillText("Overland",VO_[0],VO_[1]-4);
+  ctx.textBaseline="top";ctx.fillStyle=C.shallow;ctx.textAlign="left";ctx.fillText("Shallow",VS_[0]-12,VS_[1]+5);
+  ctx.fillStyle=C.ground;ctx.textAlign="right";ctx.fillText("Groundwater",VG_[0]+12,VG_[1]+5);
+  ctx.fillStyle=alpha(C.muted,0.09);for(let i=0;i<NS;i+=2)if(JJ[i]<st.th&&NQ[i]<st.th){const p=pt(SO[i],SS[i],SG[i]);ctx.fillRect(p[0]-0.8,p[1]-0.8,1.6,1.6);}
+  if(st.w>0){ctx.fillStyle=alpha(C.ink,0.13);for(const i of st.behQ){const p=pt(SO[i],SS[i],SG[i]);ctx.fillRect(p[0]-1.3,p[1]-1.3,2.6,2.6);}}
+  ctx.fillStyle=st.w>0?alpha(C.iso,0.75):alpha(C.ink,0.55);for(const i of st.beh){const p=pt(SO[i],SS[i],SG[i]);ctx.fillRect(p[0]-1.3,p[1]-1.3,2.6,2.6);}
+  let p=pt(SO[st.best],SS[st.best],SG[st.best]);ctx.fillStyle=C.panel;ctx.strokeStyle=C.ink;ctx.lineWidth=1.5;diamond(ctx,p[0],p[1],5.5);ctx.fill();ctx.stroke();
+  if(st.truth){p=pt(truthSh[0],truthSh[1],truthSh[2]);ctx.fillStyle=C.truth;star(ctx,p[0],p[1],9);ctx.fill();}
+  p=pt(SO[st.sel],SS[st.sel],SG[st.sel]);ctx.lineWidth=2.5;ctx.strokeStyle=C.ink;ctx.fillStyle=C.panel;ctx.beginPath();ctx.arc(p[0],p[1],7,0,Math.PI*2);ctx.fill();ctx.stroke();
+  // key
+  ctx.font=FONT(11);ctx.textAlign="left";ctx.textBaseline="middle";const ky=h-7;let kx=2;
+  const key=(col,label)=>{ctx.fillStyle=col;ctx.fillRect(kx,ky-2,4,4);ctx.fillStyle=C.muted;ctx.fillText(label,kx+8,ky);kx+=ctx.measureText(label).width+20;};
+  if(st.w>0){key(alpha(C.ink,0.3),"flow only");key(C.iso,"flow + δ¹⁸O");}else key(alpha(C.ink,0.6),"accepted");
+  ctx.fillStyle=C.panel;ctx.strokeStyle=C.ink;ctx.lineWidth=1.2;diamond(ctx,kx+4,ky,4);ctx.fill();ctx.stroke();ctx.fillStyle=C.muted;ctx.fillText("best J",kx+11,ky);kx+=58;
+  if(st.truth){ctx.fillStyle=C.truth;star(ctx,kx+4,ky,6);ctx.fill();ctx.fillStyle=C.muted;ctx.fillText("true",kx+12,ky);}
+}
+
+function buildParams(){
+  const box=$("params");box.innerHTML="";
+  PARAMS.forEach((pp,j)=>{
+    if(pp.iso&&!PARAMS[j-1].iso){const s=document.createElement("div");s.className="sep";s.textContent="Seen only by δ¹⁸O (no effect on streamflow)";box.append(s);}
+    const l=document.createElement("span");l.className="pl";l.textContent=pp.name;
+    const cv=document.createElement("canvas");cv.id="pc"+j;cv.setAttribute("aria-hidden","true");
+    const v=document.createElement("span");v.className="pv";v.id="pv"+j;box.append(l,cv,v);
+  });
+}
+function drawParams(){
+  const p=pOf(st.sel);
+  PARAMS.forEach((pp,j)=>{
+    const g=prep($("pc"+j));if(!g)return;const{ctx,w,h}=g;
+    const U=v=>pp.log?Math.log(v/pp.lo)/Math.log(pp.hi/pp.lo):(v-pp.lo)/(pp.hi-pp.lo);
+    const pad=4,pw=w-2*pad;ctx.fillStyle=alpha(C.ink,0.05);ctx.fillRect(pad,1,pw,h-2);
+    const drawH=(hist,col)=>{const nb=hist.length,bw=pw/nb;ctx.fillStyle=col;hist.forEach((v,k)=>{const bh=v*(h-5);ctx.fillRect(pad+k*bw+0.5,h-2-bh,Math.max(1,bw-1),bh);});};
+    const outline=(hist,col)=>{const nb=hist.length,bw=pw/nb;ctx.strokeStyle=col;ctx.lineWidth=1.2;ctx.beginPath();hist.forEach((v,k)=>{const y=h-2-v*(h-5);const x=pad+k*bw;k?ctx.lineTo(x,y):ctx.moveTo(x,y);ctx.lineTo(x+bw,y);});ctx.stroke();};
+    if(st.w>0&&st.hist){drawH(st.hist[j],alpha(C.iso,0.7));if(st.histQ)outline(st.histQ[j],alpha(C.muted,0.9));}
+    else if(st.histQ)drawH(st.histQ[j],alpha(C.muted,0.55));
+    if(st.truth){const x=pad+U(TRUTH[j])*pw;ctx.fillStyle=C.truth;ctx.fillRect(x-1.25,0,2.5,h);}
+    const x=pad+Math.min(1,Math.max(0,U(p[j])))*pw;ctx.fillStyle=C.ink;ctx.fillRect(x-2,0,4,h);
+    $("pv"+j).textContent=pp.fmt(p[j]);
+  });
+}
+
+// ---- explainer: nuclei (phyllotaxis packing) ----
+function nucleusSVG(id,n){
+  const svg=$(id),ga=Math.PI*(3-Math.sqrt(5)),r=8.2,s=8.6;let out="";
+  for(let k=n-1;k>=0;k--){const rr=s*Math.sqrt(k+0.5),a=k*ga,x=50+rr*Math.cos(a),y=50+rr*Math.sin(a);
+    const cls=k>=16?"nx":(k%2===0?"pr":"nu");out+=`<circle class="${cls}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}"/>`;}
+  svg.innerHTML=out;
+}
+function drawRuler(){
+  const g=prep($("cvRuler"));if(!g||!st.cur)return;const{ctx,w,h}=g,S=st.cur,t=st.probe;
+  const L=8,R=10,lo=-24,hi=0,ax=h-24,X=v=>L+(v-lo)/(hi-lo)*(w-L-R);
+  // gradient bar: depleted (left) to ocean (right)
+  const gr=ctx.createLinearGradient(L,0,w-R,0);gr.addColorStop(0,alpha(C.iso,0.55));gr.addColorStop(1,alpha(C.iso,0.06));
+  ctx.fillStyle=gr;ctx.fillRect(L,ax-3,w-L-R,6);
+  ctx.font=FONT(10.5);ctx.fillStyle=C.muted;ctx.textAlign="center";ctx.textBaseline="top";ctx.strokeStyle=C.muted;ctx.lineWidth=1;
+  for(let v=lo;v<=hi;v+=4){const x=X(v);ctx.beginPath();ctx.moveTo(x,ax+3);ctx.lineTo(x,ax+7);ctx.stroke();ctx.fillText(v===0?"0":(v<0?"−":"")+Math.abs(v),x,ax+9);}
+  ctx.textAlign="left";ctx.fillText("lighter",L,2);ctx.textAlign="right";ctx.fillText("heavier (ocean = 0)",w-R,2);
+  const items=[];
+  if(P[t]>0.3) items.push([D[t],C.rain,30,"sq"]);
+  if(S.qo[t]>0.05) items.push([S.co[t],C.overland,24]);
+  items.push([S.cs[t],C.shallow,18]);items.push([S.cg[t],C.ground,12]);
+  for(const[v,col,hh,shape]of items){const x=X(Math.max(lo,Math.min(hi,v)));ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,ax-3);ctx.lineTo(x,ax-hh);ctx.stroke();ctx.fillStyle=col;
+    if(shape==="sq")ctx.fillRect(x-4,ax-hh-4,8,8);else{ctx.beginPath();ctx.arc(x,ax-hh,4,0,Math.PI*2);ctx.fill();}}
+  const xs=X(S.d[t]);ctx.lineWidth=2.5;ctx.strokeStyle=C.ink;ctx.fillStyle=C.panel;ctx.beginPath();ctx.arc(xs,ax,6.5,0,Math.PI*2);ctx.fill();ctx.stroke();
+  // probe table
+  $("probeTitle").textContent=`Fingerprints on day ${t}`;
+  const row=(col,label,val,cls="")=>`<i class="c" style="background:${col}"></i><span class="${cls}">${label}</span><span class="pv">${val}</span>`;
+  let html=row("var(--rain)","Rain",P[t]>0.3?fmtD(D[t]):"no rain");
+  html+=row("var(--overland)","Overland water",S.qo[t]>0.05?fmtD(S.co[t]):"not flowing");
+  html+=row("var(--shallow)","Shallow water",fmtD(S.cs[t]));
+  html+=row("var(--ground)","Groundwater",fmtD(S.cg[t]));
+  html+=row("transparent;border:2.5px solid var(--ink);border-radius:50%","Stream (the mix)",fmtD(S.d[t]),"stream");
+  $("probe").innerHTML=html;
+  const n18=R_VSMOW*(1+S.d[t]/1000)*10000;
+  $("atoms").innerHTML=`At ${fmtD(S.d[t])}, about <b>${n18.toFixed(2)}</b> in every 10,000 stream oxygen atoms are ¹⁸O, against ${(R_VSMOW*10000).toFixed(2)} in ocean water. Tiny differences, measured precisely.`;
+}
+
+// ================= catchment schematic =================
+const CMG={X0:214,X1:690,XC:452,TB:48,YB:452,DX:198,DY:-112,RISE:26};
+const PBAR=P.reduce((a,b)=>a+b,0)/N;
+function sY(x){const d=Math.abs(x-CMG.XC),u=Math.min(1,d/240);let y=300-80*Math.pow(u,0.8);if(d<12)y+=8*(1-d/12);return y;}
+const SP=(x,y,u)=>[x+u*CMG.DX,y+u*(CMG.DY-CMG.RISE)];
+const BP=(x,y,u)=>[x+u*CMG.DX,y+u*CMG.DY];
+const PT=a=>a.map(q=>q[0].toFixed(1)+","+q[1].toFixed(1)).join(" ");
+const poly=(a,st)=>`<polygon points="${PT(a)}" style="${st}"/>`;
+const pline=(a,st)=>`<polyline points="${PT(a)}" style="fill:none;${st}"/>`;
+function qbez(p0,c,p1,n=24){const o=[];for(let i=0;i<=n;i++){const t=i/n,a=(1-t)*(1-t),b=2*(1-t)*t,d=t*t;o.push([a*p0[0]+b*c[0]+d*p1[0],a*p0[1]+b*c[1]+d*p1[1]]);}return o;}
+function arrowSVG(a,w,col,dash){
+  if(!(w>0))return"";
+  const e=a[a.length-1],hl=Math.max(10,w*1.45),hw=Math.max(6.5,w*1.0);
+  let k=a.length-2;while(k>0&&Math.hypot(e[0]-a[k][0],e[1]-a[k][1])<hl)k--;
+  let dx=e[0]-a[k][0],dy=e[1]-a[k][1];const L=Math.hypot(dx,dy)||1;dx/=L;dy/=L;
+  const body=a.slice(0,k+1).concat([[e[0]-dx*hl*0.8,e[1]-dy*hl*0.8]]);
+  const b=[e[0]-dx*hl,e[1]-dy*hl],nx=-dy,ny=dx;
+  const head=[e,[b[0]+nx*hw,b[1]+ny*hw],[b[0]-nx*hw,b[1]-ny*hw]];
+  const d="M"+body.map(q=>q[0].toFixed(1)+" "+q[1].toFixed(1)).join(" L");
+  return `<path d="${d}" style="fill:none;stroke:var(--bg);stroke-width:${(w+3.5).toFixed(1)};stroke-linejoin:round;opacity:.85"/>`+
+    `<path d="${d}" style="fill:none;stroke:${col};stroke-width:${w.toFixed(1)};stroke-linejoin:round;${dash?"stroke-dasharray:7 4;":""}"/>`+
+    `<polygon points="${PT(head)}" style="fill:${col};stroke:var(--bg);stroke-width:1.5;paint-order:stroke"/>`;
+}
+function txt(x,y,t,sub,anchor="start",col="var(--ink)"){
+  return `<text class="cmt" x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}"><tspan class="t" style="fill:${col}">${t}</tspan>${sub?`<tspan class="s" x="${x.toFixed(1)}" dy="15">${sub}</tspan>`:""}</text>`;
+}
+const leader=(x1,y1,x2,y2)=>`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" style="stroke:var(--muted);stroke-width:1;stroke-dasharray:2 3"/>`;
+const fmtF=v=>(v<0.995?v.toFixed(2):v.toFixed(1))+" mm/d";
+st.cmMode="day";
+
+function cmData(){
+  const S=st.cur,p=pOf(st.sel),[c,fo,fs]=p,fg=1-fo-fs,Vs=p[6],Vg=p[7];
+  if(st.cmMode==="day"){const t=st.probe;
+    return{mode:"day",t,P:P[t],dP:D[t],ET:(1-c)*P[t],inO:c*fo*P[t],inS:c*fs*P[t],inG:c*fg*P[t],qo:S.qo[t],qs:S.qs[t],qg:S.qg[t],q:S.q[t],
+      co:S.co[t],cs:S.cs[t],cg:S.cg[t],d:S.d[t],Ss:S.Ss[t],Sg:S.Sg[t],Vs,Vg};}
+  const m=a=>a.reduce((x,y)=>x+y,0)/N;
+  return{mode:"per",P:PBAR,ET:(1-c)*PBAR,inO:c*fo*PBAR,inS:c*fs*PBAR,inG:c*fg*PBAR,qo:m(S.qo),qs:m(S.qs),qg:m(S.qg),q:m(S.q),Ss:m(S.Ss),Sg:m(S.Sg),Vs,Vg};
+}
+
+function drawCatchment(){
+  const svg=$("cmSvg");if(!svg||!st.cur||!document.body.classList.contains("show-cm"))return;
+  const {X0,X1,XC,TB,YB,DX,DY,RISE}=CMG, v=cmData(), day=v.mode==="day";
+  const W=f=>{const k=day?6:26/qMean;return f<=1e-3?0:Math.max(1.6,f*k);};
+  const capW=(w,c)=>Math.min(w,c);
+  const xs=[];for(let x=X0;x<=X1;x+=6)xs.push(x);if(xs[xs.length-1]!==X1)xs.push(X1);
+  const fS=Math.min(0.92,Math.max(0.15,v.Vs/(v.Vs+v.Ss))), fG=Math.min(0.97,Math.max(0.2,v.Vg/(v.Vg+v.Sg)));
+  let o=`<defs><pattern id="mixS" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" style="fill:var(--band)"/><circle cx="3.5" cy="3.5" r="1.25" style="fill:var(--mixdot)"/></pattern><pattern id="mixG" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" style="fill:var(--mixbg)"/><circle cx="3.5" cy="3.5" r="1.25" style="fill:var(--mixdot)"/></pattern></defs>`;
+  // ---- front face ----
+  const top=xs.map(x=>[x,sY(x)]), bandB=xs.map(x=>[x,sY(x)+TB]);
+  const sB=xs.map(x=>[x,sY(x)+TB*(1-fS)]);
+  const gB=xs.map(x=>{const t=sY(x)+TB;return[x,t+(YB-t)*(1-fG)];});
+  o+=poly(top.concat([[X1,YB],[X0,YB]]),"fill:var(--gwz)");
+  o+=poly(gB.concat([[X1,YB],[X0,YB]]),"fill:url(#mixG)");
+  o+=poly(bandB.concat(gB.slice().reverse()),"fill:var(--water);opacity:.75");
+  o+=poly(top.concat(bandB.slice().reverse()),"fill:var(--band)");
+  o+=poly(sB.concat(bandB.slice().reverse()),"fill:url(#mixS)");
+  o+=poly(top.concat(sB.slice().reverse()),"fill:var(--water);opacity:.45");
+  o+=pline(bandB,"stroke:var(--muted);stroke-width:1.4");
+  // ---- side face (x = X1) ----
+  const s1=sY(X1);
+  const sf=(y0,y1,u0=0,u1=1)=>[SP(X1,y0,u0),SP(X1,y0,u1),SP(X1,y1,u1),SP(X1,y1,u0)];
+  const gTop0=s1+TB, gTop1=SP(X1,s1+TB,1)[1], bot0=YB, bot1=BP(X1,YB,1)[1];
+  const gMid0=gTop0+(bot0-gTop0)*(1-fG), gMid1=gTop1+(bot1-gTop1)*(1-fG);
+  const xA=X1,xB=X1+DX;
+  o+=poly([[xA,gTop0],[xB,gTop1],[xB,bot1],[xA,bot0]],"fill:var(--gwz)");
+  o+=poly([[xA,gMid0],[xB,gMid1],[xB,bot1],[xA,bot0]],"fill:url(#mixG)");
+  o+=poly([[xA,gTop0],[xB,gTop1],[xB,gMid1],[xA,gMid0]],"fill:var(--water);opacity:.75");
+  o+=poly(sf(s1,s1+TB),"fill:var(--band)");
+  o+=poly(sf(s1+TB*(1-fS),s1+TB),"fill:url(#mixS)");
+  o+=pline([[xA,gTop0],[xB,gTop1]],"stroke:var(--muted);stroke-width:1.4");
+  o+=poly(sf(s1,s1+TB*(1-fS)),"fill:var(--water);opacity:.45");
+  o+=poly([[xA,s1],[xB,SP(X1,s1,1)[1]],[xB,bot1],[xA,bot0]],"fill:#000;opacity:.10");
+  // ---- top surface ----
+  const fl=xs.filter(x=>x<=XC),fr=xs.filter(x=>x>=XC);
+  const surfPoly=arr=>arr.map(x=>SP(x,sY(x),0)).concat(arr.slice().reverse().map(x=>SP(x,sY(x),1)));
+  o+=poly(surfPoly(fl),"fill:var(--surfL)");o+=poly(surfPoly(fr),"fill:var(--surfR)");
+  for(const u of[0.2,0.4,0.6,0.8])o+=pline(xs.map(x=>SP(x,sY(x),u)),"stroke:var(--ink);stroke-width:.8;opacity:.14");
+  for(const x0 of[X0+60,X0+130,X1-60,X1-130])o+=pline([0,0.25,0.5,0.75,1].map(u=>SP(x0,sY(x0),u)),"stroke:var(--ink);stroke-width:.6;opacity:.08");
+  // outlines
+  o+=pline(top,"stroke:var(--muted);stroke-width:1.3");
+  o+=pline(xs.map(x=>SP(x,sY(x),1)),"stroke:var(--muted);stroke-width:1.1");
+  o+=pline([[X0,sY(X0)],[X0,YB],[X1,YB],[xB,bot1],[xB,SP(X1,s1,1)[1]]],"stroke:var(--muted);stroke-width:1.3");
+  o+=pline([[X1,s1],[xB,SP(X1,s1,1)[1]]],"stroke:var(--muted);stroke-width:1.1");
+  o+=pline([SP(X0,sY(X0),0),SP(X0,sY(X0),1)],"stroke:var(--muted);stroke-width:1.1");
+  o+=pline([[X1,s1],[X1,YB]],"stroke:var(--muted);stroke-width:1.1");
+  // ---- rain ----
+  const cx=330,cy=46, rainy=v.P>0.3;
+  const streaks=day?(rainy?Math.round(Math.min(80,8+v.P*1.6)):0):22;
+  const rr=rng(1000+(day?v.t:999));let rs="";
+  for(let i=0;i<streaks;i++){const x0=X0+20+rr()*(X1-X0-40),u=0.1+rr()*0.85,e=SP(x0,sY(x0)-2,u);const sy=Math.max(cy+30,e[1]-46-rr()*22);const sx=e[0]-(e[1]-sy)*0.16;rs+=`<line x1="${sx.toFixed(1)}" y1="${sy.toFixed(1)}" x2="${e[0].toFixed(1)}" y2="${e[1].toFixed(1)}"/>`;}
+  o+=`<g style="stroke:var(--rain);stroke-width:${day&&v.P>25?2:1.5};stroke-linecap:round;opacity:.9">${rs}</g>`;
+  const cOp=day&&!rainy?0.45:1;
+  o+=`<g style="fill:var(--cloud);stroke:var(--muted);stroke-width:1.2;opacity:${cOp}"><path d="M${cx-78} ${cy+26} a20 20 0 0 1 14-34 a30 30 0 0 1 52-14 a26 26 0 0 1 46 8 a20 20 0 0 1 18 40 z"/></g>`;
+  o+=txt(cx+70,cy-8,day?(rainy?`Rain ${v.P.toFixed(1)} mm on day ${v.t}`:`Day ${v.t}: no rain`):"Rain",day?(rainy?`δ¹⁸O ${fmtD(v.dP)}`:"only stored water reaches the stream"):`150-day mean ${v.P.toFixed(2)} mm/d`,"start","var(--ink)");
+  // ---- arrows ----
+  const cO="var(--overland)",cS="var(--shallow)",cG="var(--ground)",cQ="var(--ink)",cE="var(--muted)";
+  const wO=capW(W(v.qo),34),wS=capW(W(v.qs),TB*0.62),wG=capW(W(v.qg),34),wQ=capW(W(v.q),40);
+  const wIn=capW(W(v.inS),TB*0.6),wRe=capW(W(v.inG),28),wET=capW(W(v.ET),22);
+  // ET
+  const eb=SP(X1-115,sY(X1-115)-4,0.72);
+  o+=arrowSVG([eb,[eb[0]+6,eb[1]-30],[eb[0]+14,eb[1]-60]],wET,cE,true);
+  o+=txt(eb[0]+24,eb[1]-58,"Losses (ET)",wET?fmtF(v.ET):"none","start",cE);
+  // infiltration (left) and recharge (right)
+  const xi=X0+22, xr=X1-26;
+  o+=arrowSVG([[xi,sY(xi)-36],[xi,sY(xi)+TB*0.58]],wIn,cS);
+  o+=arrowSVG([[xr,sY(xr)+TB*0.2],[xr,sY(xr)+TB+46]],wRe,cG);
+  // shallow lateral
+  const shL=xs.filter(x=>x>=X0+44&&x<=XC-16).map(x=>[x,sY(x)+TB*0.36]);
+  const shR=xs.filter(x=>x<=X1-46&&x>=XC+16).reverse().map(x=>[x,sY(x)+TB*0.36]);
+  o+=arrowSVG(shL,wS,cS);o+=arrowSVG(shR,wS,cS);
+  // groundwater
+  const gy=x=>{const t=sY(x)+TB;return t+(YB-t)*0.34;};
+  const gEndY=sY(XC)+TB+4;
+  o+=arrowSVG(qbez([X0+72,gy(X0+72)],[XC-130,YB-26],[XC-10,gEndY]),wG,cG);
+  o+=arrowSVG(qbez([X1-72,gy(X1-72)],[XC+130,YB-26],[XC+10,gEndY]),wG,cG);
+  // overland on surface
+  const ou=0.42;
+  const ovL=xs.filter(x=>x>=X0+56&&x<=XC-18).map(x=>SP(x,sY(x)-3,ou));
+  const ovR=xs.filter(x=>x<=X1-56&&x>=XC+18).reverse().map(x=>SP(x,sY(x)-3,ou));
+  o+=arrowSVG(ovL,wO,cO);o+=arrowSVG(ovR,wO,cO);
+  // stream (tapered along channel)
+  { const B=SP(XC,sY(XC)-1,0.98),F=[XC,sY(XC)-1];let dx=F[0]-B[0],dy=F[1]-B[1];const L=Math.hypot(dx,dy);dx/=L;dy/=L;const nx=-dy,ny=dx;
+    const hl=Math.max(10,wQ*1.2),hw=Math.max(6.5,wQ*0.85),Fb=[F[0]-dx*hl,F[1]-dy*hl],w0=Math.max(1.5,wQ*0.18);
+    const body=[[B[0]+nx*w0/2,B[1]+ny*w0/2],[Fb[0]+nx*wQ/2,Fb[1]+ny*wQ/2],[Fb[0]-nx*wQ/2,Fb[1]-ny*wQ/2],[B[0]-nx*w0/2,B[1]-ny*w0/2]];
+    const head=[[F[0]+dx*3,F[1]+dy*3],[Fb[0]+nx*hw,Fb[1]+ny*hw],[Fb[0]-nx*hw,Fb[1]-ny*hw]];
+    o+=poly(body,"fill:var(--water);stroke:var(--ink);stroke-width:1.2");o+=poly(head,"fill:var(--ink)");
+    const qy=sY(XC)+10; o+=leader(CMG.X0-8,qy,XC-8,sY(XC)+3);
+    o+=txt(CMG.X0-12,qy-3,"Streamflow Q",fmtF(v.q)+(day?`, ${fmtD(v.d)}`:""),"end",cQ); }
+  // ---- labels (left margin with leaders) ----
+  const lx=CMG.X0-12;
+  const L1=ovL[0]; o+=leader(lx+4,L1[1],L1[0]-8,L1[1]);
+  o+=txt(lx,L1[1]-3,"Overland flow",wO?fmtF(v.qo)+(day?`, ${fmtD(v.co)}`:`, ${pct(v.qo/v.q)} of Q`):"none today","end",cO);
+  const yi=sY(xi)-22; o+=leader(lx+4,yi+18,xi-8,yi+18);
+  o+=txt(lx,yi+15,"Infiltration",wIn?fmtF(v.inS):"none","end",cS);
+  const L2=shL[0]; o+=leader(lx+4,L2[1]+30,L2[0]-4,L2[1]+4);
+  o+=txt(lx,L2[1]+27,"Shallow flow",fmtF(v.qs)+(day?`, ${fmtD(v.cs)}`:`, ${pct(v.qs/v.q)} of Q`),"end",cS);
+  const g0=[X0+72,gy(X0+72)]; o+=leader(lx+4,g0[1]+40,g0[0]-6,g0[1]+4);
+  o+=txt(lx,g0[1]+37,"Groundwater flow",fmtF(v.qg)+(day?`, ${fmtD(v.cg)}`:`, ${pct(v.qg/v.q)} of Q`),"end",cG);
+  o+=txt(xr-10,sY(xr)+TB+30,"Recharge",wRe?fmtF(v.inG):"none","end",cG);
+  // ---- store notes on side face ----
+  const sx=X1+DX*0.5;
+  const sMid=SP(X1,s1+TB*0.5,0.5)[1];
+  o+=txt(sx,sMid-4,"Shallow store",`moving ${Math.round(v.Ss)} mm, mixing ${Math.round(v.Vs)} mm`,"middle","var(--ink)");
+  const gMidY=(gTop0+gTop1)/2+((bot0+bot1)/2-(gTop0+gTop1)/2)*0.42;
+  o+=txt(sx,gMidY,"Groundwater store",`moving ${Math.round(v.Sg)} mm`,"middle","var(--ink)");
+  o+=`<text class="cmt" x="${sx}" y="${(gMidY+30).toFixed(1)}" text-anchor="middle"><tspan class="s">mixing ${Math.round(v.Vg)} mm</tspan></text>`;
+  o+=txt(XC,YB-14,"Mixing volume","old water that mixes but never drains","middle","var(--ink)");
+  svg.innerHTML=o;
+  // day timeline
+  drawDay();
+}
+function drawDay(){
+  const g=prep($("cvDay"));if(!g||!st.cur)return;const{ctx,w,h}=g,S=st.cur,t0=st.probe;
+  const L=34,R=6,Tp=20,B=14,pw=w-L-R,X=t=>L+(t+0.5)/N*pw,rainH=(h-Tp-B)*0.2,qTop=Tp+rainH+4,qBot=h-B;
+  const Y=v=>qBot-v/qMax*(qBot-qTop);
+  ctx.fillStyle=alpha(C.ink,0.04);ctx.fillRect(L,Tp,pw,h-Tp-B);
+  ctx.font=FONT(10.5);ctx.fillStyle=C.muted;ctx.strokeStyle=C.line;ctx.lineWidth=1;
+  for(const v of[0,qMax/2,qMax]){const y=Y(v);ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.textAlign="right";ctx.textBaseline="middle";ctx.fillText(+v.toFixed(1),L-4,y);}
+  ctx.save();ctx.translate(8,(qTop+qBot)/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("mm/d",0,0);ctx.restore();
+  ctx.textAlign="center";ctx.textBaseline="top";for(let d=30;d<N;d+=30)ctx.fillText(d,L+d/N*pw,qBot+2);
+  ctx.fillStyle=C.rain;for(let t=0;t<N;t++)if(P[t]>0)ctx.fillRect(X(t)-pw/N*0.36,Tp,Math.max(1,pw/N*0.72),P[t]/pMax*rainH);
+  const base=new Float64Array(N);
+  for(const[arr,col]of[[S.qg,C.ground],[S.qs,C.shallow],[S.qo,C.overland]]){ctx.beginPath();for(let t=0;t<N;t++){const y=Y(base[t]+arr[t]);t?ctx.lineTo(X(t),y):ctx.moveTo(X(t),y);}for(let t=N-1;t>=0;t--)ctx.lineTo(X(t),Y(base[t]));ctx.closePath();ctx.fillStyle=alpha(col,0.85);ctx.fill();for(let t=0;t<N;t++)base[t]+=arr[t];}
+  ctx.beginPath();for(let t=0;t<N;t++){const y=Y(S.q[t]);t?ctx.lineTo(X(t),y):ctx.moveTo(X(t),y);}ctx.strokeStyle=C.ink;ctx.lineWidth=1.3;ctx.stroke();
+  ctx.lineWidth=1.1;ctx.strokeStyle=C.ink;ctx.fillStyle=C.panel;
+  if(pw/N>3.2)for(let t=0;t<N;t++){ctx.beginPath();ctx.arc(X(t),Y(obs[t]),1.8,0,Math.PI*2);ctx.fill();ctx.stroke();}
+  const x=X(t0);ctx.strokeStyle=C.iso;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,Tp);ctx.lineTo(x,qBot);ctx.stroke();
+  // composition readout for the selected day
+  const q=S.q[t0]||1e-9,parts=[[`Day ${t0}: Q = ${S.q[t0].toFixed(2)} mm/d  `,C.iso,700],[`${pct(S.qo[t0]/q)} overland`,C.overland,700],[",  ",C.muted,400],[`${pct(S.qs[t0]/q)} shallow`,C.shallow,700],[",  ",C.muted,400],[`${pct(S.qg[t0]/q)} groundwater`,C.ground,700]];
+  ctx.textBaseline="top";ctx.textAlign="left";let tx=L;
+  for(const[tt,col,wt]of parts){ctx.font=FONT(12.5,wt);ctx.fillStyle=col;ctx.fillText(tt,tx,2);tx+=ctx.measureText(tt).width;}
+}
+function buildNotes(){
+  const ar=(col,dash)=>`<svg viewBox="0 0 24 14" aria-hidden="true"><path d="M1 7H15" style="stroke:${col};stroke-width:4;${dash?"stroke-dasharray:4 2;":""}"/><path d="M14 2L23 7L14 12Z" style="fill:${col}"/></svg>`;
+  const sw=sty=>`<svg viewBox="0 0 24 14" aria-hidden="true"><rect x="1" y="1" width="22" height="12" rx="2" style="${sty}"/></svg>`;
+  const items=[
+    [`<svg viewBox="0 0 24 14" aria-hidden="true"><g style="stroke:var(--rain);stroke-width:1.6;stroke-linecap:round"><line x1="6" y1="1" x2="4" y2="13"/><line x1="12" y1="1" x2="10" y2="13"/><line x1="18" y1="1" x2="16" y2="13"/></g></svg>`,"Rain","Water input. Each storm carries its own δ¹⁸O fingerprint."],
+    [ar("var(--muted)",true),"Losses (ET)","The fraction 1 − c of rain that returns to the atmosphere and never reaches the stream."],
+    [ar("var(--overland)"),"Overland flow","Rain running over saturated ground straight to the stream. Fast, new water, mixes over only 0.5 mm."],
+    [ar("var(--shallow)"),"Infiltration and shallow flow","Rain entering the upper soil and draining laterally to the stream within days."],
+    [ar("var(--ground)"),"Recharge and groundwater flow","Water percolating to the aquifer, draining over weeks to months, and entering through the stream bed."],
+    [ar("var(--ink)"),"Streamflow Q","The only flux the hydrograph measures: the sum of the three pathways."],
+    [sw("fill:var(--water);opacity:.8"),"Moving water","Storage that drains. Its size sets how fast the store responds (S = k·Q)."],
+    [sw("fill:url(#nmix)"),"Mixing volume","Stored water that mixes with new arrivals but never drains. It ages and damps the δ¹⁸O signal without changing streamflow. Drawn to scale with moving water."],
+  ];
+  $("cmNotes").innerHTML=`<svg width="0" height="0" style="position:absolute"><defs><pattern id="nmix" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" style="fill:var(--mixbg)"/><circle cx="3" cy="3" r="1.1" style="fill:var(--mixdot)"/></pattern></defs></svg>`+
+    items.map(([g,t,d])=>`<div class="nt">${g}<div><b>${t}</b><span>${d}</span></div></div>`).join("");
+}
+function setView(cm){
+  document.body.classList.toggle("show-cm",cm);
+  $("tabTs").setAttribute("aria-selected",String(!cm));$("tabCm").setAttribute("aria-selected",String(cm));
+  if(!cm)stopDays();requestDraw();
+}
+function setCmMode(m){st.cmMode=m;$("modeDay").setAttribute("aria-pressed",String(m==="day"));$("modePer").setAttribute("aria-pressed",String(m==="per"));requestDraw();}
+let dayRaf=0,dayLast=0,dayAcc=0;
+function dayStep(ts){if(!st.dayPlaying)return;const dt=dayLast?(ts-dayLast)/1000:0;dayLast=ts;dayAcc+=dt*8;
+  if(dayAcc>=1){const n=Math.floor(dayAcc);dayAcc-=n;st.probe=(st.probe+n)%N;requestDraw();}dayRaf=requestAnimationFrame(dayStep);}
+function startDays(){if(st.cmMode!=="day")setCmMode("day");st.dayPlaying=true;dayLast=0;dayAcc=0;$("playDays").textContent="Pause days";$("playDays").setAttribute("aria-pressed","true");dayRaf=requestAnimationFrame(dayStep);}
+function stopDays(){if(!st.dayPlaying)return;st.dayPlaying=false;cancelAnimationFrame(dayRaf);$("playDays").textContent="Play days";$("playDays").setAttribute("aria-pressed","false");}
+
+let drawPending=false;
+function requestDraw(){if(drawPending)return;drawPending=true;requestAnimationFrame(()=>{drawPending=false;drawAll();});}
+function drawAll(){const cm=document.body.classList.contains("show-cm");if(st.env&&st.envDirty&&!cm)computeEnvelope();if(cm)drawCatchment();else{drawHydro();drawIso();}drawDotty();drawTern();drawParams();drawRuler();insight();}
+
+// ================= interaction =================
+function onShare(){
+  let s=$("share").value/1000;
+  if(st.beh.length&&(s<st.lo||s>st.hi)){s=Math.min(st.hi,Math.max(st.lo,s));$("share").value=Math.round(s*1000);}
+  select(pickAtShare(s));
+}
+function setW(v){
+  st.w=Math.round(v*100)/100;$("w").value=st.w;$("wv").textContent=st.w.toFixed(2);
+  $("segQ").setAttribute("aria-pressed",String(st.w===0));$("segI").setAttribute("aria-pressed",String(st.w>0));
+  updateBehavioral();onShare();
+}
+let tween=0;
+function animateW(target){
+  cancelAnimationFrame(tween);stopPlay();
+  if(reduceMotion){setW(target);return;}
+  const from=st.w,t0=performance.now(),dur=1400;
+  const f=now=>{const u=Math.min(1,(now-t0)/dur),e=u<0.5?2*u*u:1-Math.pow(-2*u+2,2)/2;setW(from+(target-from)*e);if(u<1)tween=requestAnimationFrame(f);};
+  tween=requestAnimationFrame(f);
+}
+$("segQ").addEventListener("click",()=>animateW(0));
+$("segI").addEventListener("click",()=>animateW(0.5));
+$("w").addEventListener("input",e=>{cancelAnimationFrame(tween);setW(+e.target.value);});
+$("share").addEventListener("input",()=>{stopPlay();onShare();});
+$("th").addEventListener("input",e=>{st.th=+e.target.value;$("thv").textContent=st.th.toFixed(2);updateQonly();updateBehavioral();onShare();});
+$("env").addEventListener("change",e=>{st.env=e.target.checked;requestDraw();});
+$("truth").addEventListener("change",e=>{st.truth=e.target.checked;requestDraw();});
+$("resample").addEventListener("click",()=>{stopPlay();st.seed=(st.seed*7919+13)%100003;sampleEnsemble(st.seed);updateQonly();updateBehavioral();onShare();});
+
+function nearest(geomFn,x,y){let bi=-1,bd=144;for(let i=0;i<NS;i++){const[px,py]=geomFn(i);const d=(px-x)**2+(py-y)**2;if(d<bd){bd=d;bi=i;}}return bi;}
+$("cvDotty").addEventListener("click",e=>{const r=e.currentTarget.getBoundingClientRect();const i=nearest(k=>[dottyGeom.X(SO[k]),dottyGeom.Y(JJ[k])],e.clientX-r.left,e.clientY-r.top);if(i>=0){stopPlay();select(i,{syncSlider:true});}});
+$("cvTern").addEventListener("click",e=>{const r=e.currentTarget.getBoundingClientRect();const i=nearest(k=>ternGeom.pt(SO[k],SS[k],SG[k]),e.clientX-r.left,e.clientY-r.top);if(i>=0){stopPlay();select(i,{syncSlider:true});}});
+["cvDotty","cvTern"].forEach(id=>$(id).style.cursor="crosshair");
+function probeFrom(e){const cv=e.currentTarget,r=cv.getBoundingClientRect(),pw=r.width-TL-TR;const t=Math.floor((e.clientX-r.left-TL)/pw*N);const tt=Math.max(0,Math.min(N-1,t));if(tt!==st.probe){st.probe=tt;requestDraw();}}
+["cvHydro","cvIso"].forEach(id=>{$(id).addEventListener("pointermove",probeFrom);$(id).addEventListener("pointerdown",probeFrom);});
+
+let raf=0,last=0;
+function step(ts){
+  if(!st.playing)return;const dt=last?(ts-last)/1000:0;last=ts;
+  const speed=Math.max(0.01,st.hi-st.lo)/6;let s=$("share").value/1000+st.dir*speed*dt;
+  if(s>=st.hi){s=st.hi;st.dir=-1;}if(s<=st.lo){s=st.lo;st.dir=1;}
+  $("share").value=Math.round(s*1000);select(pickAtShare(s));raf=requestAnimationFrame(step);
+}
+function startPlay(){if(!st.beh.length)return;st.playing=true;last=0;$("play").textContent="Pause";$("play").setAttribute("aria-pressed","true");raf=requestAnimationFrame(step);}
+function stopPlay(){if(!st.playing)return;st.playing=false;cancelAnimationFrame(raf);$("play").textContent="Play sweep";$("play").setAttribute("aria-pressed","false");}
+$("play").addEventListener("click",()=>st.playing?stopPlay():startPlay());
+
+document.addEventListener("keydown",e=>{
+  const tag=(e.target.tagName||"").toLowerCase(),inField=tag==="input"||tag==="button"||tag==="textarea";
+  if(e.key===" "&&!inField){e.preventDefault();st.playing?stopPlay():startPlay();}
+  else if(e.key==="t"||e.key==="T"){$("truth").checked=!$("truth").checked;$("truth").dispatchEvent(new Event("change"));}
+  else if(e.key==="e"||e.key==="E"){$("env").checked=!$("env").checked;$("env").dispatchEvent(new Event("change"));}
+  else if(e.key==="i"||e.key==="I"){animateW(st.w>0?0:0.5);}
+  else if(e.key==="b"||e.key==="B"){setBasics(document.body.classList.contains("no-expl"));}
+  else if(e.key==="d"||e.key==="D"){setDefs(!document.body.classList.contains("show-defs"));}
+  else if(e.key==="c"||e.key==="C"){setView(!document.body.classList.contains("show-cm"));}
+  else if((e.key==="ArrowLeft"||e.key==="ArrowRight")&&!inField){e.preventDefault();stopPlay();$("share").value=+$("share").value+(e.key==="ArrowRight"?10:-10);onShare();}
+});
+
+const mq=window.matchMedia("(prefers-color-scheme: dark)");
+mq.addEventListener&&mq.addEventListener("change",()=>{readColors();requestDraw();});
+new ResizeObserver(()=>{if(st.cur)requestDraw();}).observe(document.querySelector(".wrap"));
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{if(st.cur)requestDraw();});
+
+$("tabTs").addEventListener("click",()=>setView(false));
+$("tabCm").addEventListener("click",()=>setView(true));
+$("modeDay").addEventListener("click",()=>setCmMode("day"));
+$("modePer").addEventListener("click",()=>{stopDays();setCmMode("per");});
+$("playDays").addEventListener("click",()=>st.dayPlaying?stopDays():startDays());
+{const cv=$("cvDay");const pick=e=>{const r=cv.getBoundingClientRect();const t=Math.max(0,Math.min(N-1,Math.floor((e.clientX-r.left-4)/(r.width-8)*N)));if(t!==st.probe){st.probe=t;requestDraw();}};
+ cv.addEventListener("pointermove",pick);cv.addEventListener("pointerdown",e=>{stopDays();pick(e);});}
+function setDefs(on){document.body.classList.toggle("show-defs",on);$("defsBtn").setAttribute("aria-checked",String(on));if(on&&document.body.classList.contains("no-expl"))setBasics(true);else requestDraw();}
+$("defsBtn").addEventListener("click",()=>setDefs(!document.body.classList.contains("show-defs")));
+function setBasics(on){document.body.classList.toggle("no-expl",!on);$("basics").setAttribute("aria-pressed",String(on));requestDraw();}
+$("basics").addEventListener("click",()=>setBasics(document.body.classList.contains("no-expl")));
+// ================= init =================
+readColors();if(window.innerWidth<1500)document.body.classList.add("no-expl"),$("basics").setAttribute("aria-pressed","false");buildNotes();nucleusSVG("nuc16",16);nucleusSVG("nuc18",18);buildParams();
+sampleEnsemble(st.seed);updateQonly();updateBehavioral();
+$("share").value=Math.round(Math.min(st.hi,Math.max(st.lo,0.30))*1000);onShare();
+})();
+</script>
+</body>
+</html>
